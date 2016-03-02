@@ -323,12 +323,11 @@ def sslv2_connect(ip, port, protocol, cipher_suite, result_additional_data):
     return "%s:%s" % (VULN, base64.b64encode(public_key.exportKey(format='DER')))
 
 if __name__ == '__main__':
-    ip = sys.argv[1]
+    ip = sys.argv[1].strip()
     port = int(sys.argv[2])
     scan_id = os.getcwd()
     dtime = datetime.datetime.now()
-    print 'Testing %s on port %s' % (ip, port)
-
+    
     protocol = Protocol.BARE_SSLv2
     if len(sys.argv) >= 4:
         if sys.argv[3] == '-esmtp':
@@ -342,26 +341,61 @@ if __name__ == '__main__':
         else:
             print 'You gave 3 arguments, argument 3 is not a recognized protocol. Bailing out'
             sys.exit(1)
+            
+    if os.path.exists(ip):
+	ip_file = open(ip,"r")
+	for eachip in ip_file:
+	    ip = eachip.strip()
+	    
+	    vulns = []
+            for cipher_suite in cipher_suites:
+                string_description = cipher_suite.get_string_description()
+                ret_additional_data = {}
+                ret = sslv2_connect(ip, port, protocol, cipher_suite, ret_additional_data)
+                if ret.startswith(VULN):
+                    pub_key = ret.replace('%s:' % VULN, '')
 
-    vulns = []
-    for cipher_suite in cipher_suites:
+                    cve_string = ""
+                    if not ret_additional_data['cipher_suite_advertised']:
+                        cve_string = " to CVE-2015-3197"
+                    if string_description == "RC4_128_WITH_MD5":
+                        if cve_string == "":
+                            cve_string = " to CVE-2016-0703"
+                        else:
+                            cve_string += " and CVE-2016-0703"
 
-        string_description = cipher_suite.get_string_description()
-        ret_additional_data = {}
-        ret = sslv2_connect(ip, port, protocol, cipher_suite, ret_additional_data)
-
-        if ret.startswith(VULN):
-            pub_key = ret.replace('%s:' % VULN, '')
-
-            cve_string = ""
-            if not ret_additional_data['cipher_suite_advertised']:
-                cve_string = " to CVE-2015-3197"
-            if string_description == "RC4_128_WITH_MD5":
-                if cve_string == "":
-                    cve_string = " to CVE-2016-0703"
+                    vulres = '%s: Server is vulnerable%s, with cipher %s' % (ip, cve_string, string_description)
+                    print vulres
+                    log = open("drown_scanner.txt","a")
+                    log.write(vulres+"\n")
+                    log.close()
                 else:
-                    cve_string += " and CVE-2016-0703"
+                    print '%s: Server is NOT vulnerable with cipher %s, Message: %s' % (ip, string_description, ret)
+    else:
+        print 'Testing %s on port %s' % (ip, port)
+        vulns = []
+        for cipher_suite in cipher_suites:
 
-            print '%s: Server is vulnerable%s, with cipher %s\n' % (ip, cve_string, string_description)
-        else:
-            print '%s: Server is NOT vulnerable with cipher %s, Message: %s\n' % (ip, string_description, ret)
+            string_description = cipher_suite.get_string_description()
+            ret_additional_data = {}
+            ret = sslv2_connect(ip, port, protocol, cipher_suite, ret_additional_data)
+
+            if ret.startswith(VULN):
+                pub_key = ret.replace('%s:' % VULN, '')
+
+                cve_string = ""
+                if not ret_additional_data['cipher_suite_advertised']:
+                    cve_string = " to CVE-2015-3197"
+                if string_description == "RC4_128_WITH_MD5":
+                    if cve_string == "":
+                        cve_string = " to CVE-2016-0703"
+                    else:
+                        cve_string += " and CVE-2016-0703"
+
+                vulres = '%s: Server is vulnerable%s, with cipher %s' % (ip, cve_string, string_description)
+                print vulres
+                log = open("drown_scanner.txt","a")
+                log.write(vulres+"\n")
+                log.close()
+            else:
+                print '%s: Server is NOT vulnerable with cipher %s, Message: %s' % (ip, string_description, ret)
